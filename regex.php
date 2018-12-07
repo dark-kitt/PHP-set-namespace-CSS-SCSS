@@ -1,4 +1,6 @@
 <?php
+// namespace
+define('NAMESPACE', 'HTML5-BC__');
 // match spaces
 define('REGEX_SPACES', '\s+');
 
