@@ -1,371 +1,330 @@
 <?php
+    /**
+     * set CSS namespace in HTML, JS and CSS file
+     */
+    class namespaceCSS
+    {
 
-    class namespaceCSS {
+        public $html;
+        public $scss;
+        public $js;
+        public $selectors;
 
-        public static function flatten_array(array $array)
+        function __construct(stdClass $selectors = null, array $html = [], array $scss = [], array $js = [], string $directory = '')
         {
-            $return = array();
+            if ($selectors === null)
+            {
+                $html_length = count($html);
+                $html_content = '';
+                while ($html_length--)
+                {
+                    $html_content .= file_get_contents( $directory . $html[$html_length] );
+                }
+                $scss_length = count($scss);
+                $scss_content = '';
+                while ($scss_length--)
+                {
+                    $scss_content .= file_get_contents( $directory . '/scss' . $scss[$scss_length] );
+                }
+                $js_length = count($js);
+                $js_content = '';
+                while ($js_length--)
+                {
+                    $js_content .= file_get_contents( $directory . '/js' . $js[$js_length] );
+                }
+                $selectors = $this->find_selectors($html_content, $scss_content, $js_content);
+            }
+
+            $return = $this->set_namespace($selectors, $html_content,  $scss_content,  $js_content);
+
+            $this->html = $return->html;
+            $this->scss = $return->scss;
+            $this->js = $return->js;
+            $this->selectors = $selectors;
+        }
+
+        private function set_namespace(stdClass $selectors, string $html = '', string $scss = '', string $js = '')
+        {
+            $html = $html;
+            $scss = $scss;
+            $js = $js;
+
+            $html_ids = $selectors->html->id;
+            $html_classes = $selectors->html->class;
+
+            $scss_ids = $selectors->scss->id;
+            $scss_classes = $selectors->scss->class;
+
+            $js_ids = [
+                [
+                    $selectors->js->id->get_id,
+                    '/((?:getElementById\b)\(.*?)(',
+                    '\b)/'
+                ],
+                [
+                    $selectors->js->id->id_jQuery,
+                    '/((?:\$)\(.*?(?=\#)\#)(',
+                    '\b)/'
+                ]
+            ];
+
+            $js_classes = [
+                [
+                    $selectors->js->class->get_class,
+                    '/((?:getElementsByClassName\b)\(.*?)(',
+                    '\b)/'
+                ],
+                [
+                    $selectors->js->class->class_jQuery,
+                    '/((?:\$)\(.*?(?=\.)\.)(',
+                    '\b)/'
+                ],
+                [
+                    $selectors->js->class->arh_jQuery,
+                    '/((?:\.addClass\b|\.hasClass\b|\.removeClass\b)\(.*?)(',
+                    '\b)/'
+                ]
+            ];
+
+            if ( count($html_ids) > 0 )
+            {
+                foreach ($html_ids as $value)
+                {
+                    $html = $this->match_set_namespace(
+                        $html,
+                        '/(id(?(?=\s+)\s+)\=(?(?=\s+)\s+)\".*?)(' . $value . '\b.*?(?=\"))/'
+                    );
+                    /* WORKAROUND: match xlink:href in <svg> */
+                    $html = preg_replace_callback(
+                                    '/' . REGEX_SVG_ALL .'/',
+                                    function ($match) use($value) {
+                                        if (preg_match('/(?:xlink:href|href).*?\#' . $value . '\b/', $match[0]))
+                                        {
+                                            return $match[0] = $this->match_set_namespace(
+                                                $match[0],
+                                                '/((?:xlink:href|href).*?\#)(' . $value . '\b)/'
+                                            );
+                                        }
+                                        else
+                                        {
+                                            return $match[0];
+                                        }
+                                    },
+                                    $html
+                                );
+                }
+            }
+            if ( count($html_classes) > 0 )
+            {
+                foreach ($html_classes as $value)
+                {
+                    $html = $this->match_set_namespace(
+                        $html,
+                        '/(class\b(?(?=\s+)\s+)\=(?(?=\s+)\s+).*?(?|(?:(?=\s+)\s+)|(?:(?=\")\")|(?:(?=\')\')))(' . $value . '\b.*?(?=\"))/'
+                    );
+                }
+            }
+            if ( count($scss_ids) > 0 )
+            {
+                foreach ($scss_ids as $value)
+                {
+                    $scss = $this->match_set_namespace(
+                        $scss,
+                        '/(\#)(' . $value . '\b)/'
+                    );
+                }
+            }
+            if ( count($scss_classes) > 0 )
+            {
+                foreach ($scss_classes as $value)
+                {
+                    $scss = $this->match_set_namespace(
+                        $scss,
+                        '/(\.)(' . $value . '\b)/'
+                    );
+                }
+            }
+            foreach ($js_ids as $id) {
+                if (count($id[0]) > 0) {
+                    foreach ($id[0] as $value)
+                    {
+                        $js = $this->match_set_namespace(
+                            $js,
+                            $id[1] . $value . $id[2]
+                        );
+                    }
+                }
+            }
+            foreach ($js_classes as $class) {
+                if (count($class[0]) > 0) {
+                    foreach ($class[0] as $value)
+                    {
+                        $js = $this->match_set_namespace(
+                            $js,
+                            $class[1] . $value . $class[2]
+                        );
+                    }
+                }
+            }
+
+            return (object) [
+                'html' => $html,
+                'scss' => $scss,
+                'js' => $js
+            ];
+        }
+
+        /*
+         * match and set namespace
+         */
+        private function match_set_namespace(string $content, $pattern)
+        {
+            $content = preg_replace_callback(
+                            $pattern,
+                            function($match) {
+                                if ( preg_match('/' . constant('NAMESPACE') . '\b/', $match[0]) )
+                                {
+                                    return $match[1] . $match[2];
+                                }
+                                else
+                                {
+                                    return $match[1] . constant('NAMESPACE') . $match[2];
+                                }
+                            },
+                            $content
+                        );
+            return $content;
+        }
+
+        /*
+         * find all selectors
+         */
+        private function find_selectors(string $html = '', string $scss = '', string $js = '')
+        {
+            $pattern_id_html = '/' . REGEX_ID_HTML . '/';
+            $pattern_class_html = '/' . REGEX_CLASS_HTML . '/';
+            $pattern_tag_html = '/' . REGEX_TAG_HTML . '/';
+
+            $pattern_all_scss = '/' . REGEX_ALL_SCSS . '/';
+            $pattern_id_scss = '/' . REGEX_ID_SCSS . '/';
+            $pattern_class_scss = '/' . REGEX_CLASS_SCSS . '/';
+            $pattern_tag_scss = '/' . REGEX_TAG_SCSS . '/';
+
+            $pattern_get_id_js = '/' . REGEX_GET_ID_JS . '/';
+            $pattern_get_class_js = '/' . REGEX_GET_CLASS_JS . '/';
+
+            $pattern_add_rem_hasClass_jQuery = '/' . REGEX_ADD_REM_HASCLASS_JQUERY . '/';
+            $pattern_selectors_jQuery = '/' . REGEX_SELECTORS_JQUERY . '/';
+            $pattern_id_selectors_jQuery = '/' . REGEX_ID_SELECTORS_JQUERY . '/';
+            $pattern_class_selectors_jQuery = '/' . REGEX_CLASS_SELECTORS_JQUERY . '/';
+
+
+            /* filter html match result */
+            preg_match_all( $pattern_id_html, $html, $html_ids );
+
+            preg_match_all( $pattern_class_html, $html, $html_class_match );
+            /* WORKAROUND: for multiple whitespaces in html e.g. class="class    class class" */
+            preg_match_all('/(?|(.+?)(?:\,)|(.+))/', preg_replace( '/' . REGEX_SPACES . '/', ',', join(',',array_filter($html_class_match[1], function($value) { return $value !== ''; } ))), $html_classes);
+
+            preg_match_all( $pattern_tag_html, $html, $html_tags );
+
+            $html_ids = $this->filter_unique_flatten_array($html_ids[1]);
+            $html_classes = array_unique( $html_classes[1] );
+            $html_tags = $this->filter_unique_flatten_array($html_tags[1]);
+
+
+            /* filter scss match result */
+            preg_match_all( $pattern_all_scss, $scss, $scss_matches );
+            $scss_result = str_replace(',,', ',', preg_replace( '/' . REGEX_SPACES . '/', ',', join( ',', $scss_matches[1] )));
+
+            preg_match_all( $pattern_id_scss, $scss_result, $scss_ids );
+            foreach( $scss_ids as $key => $id )
+            {
+                $scss_ids[$key] = str_replace( '#', '', $id );
+            }
+            $scss_ids = $this->filter_unique_flatten_array($scss_ids);
+
+            preg_match_all( $pattern_class_scss, $scss_result, $scss_classes );
+            foreach( $scss_classes as $key => $class )
+            {
+                $scss_classes[$key] = str_replace( '.', '', $class );
+            }
+            $scss_classes = $this->filter_unique_flatten_array($scss_classes);
+
+            preg_match_all( $pattern_tag_scss, $scss_result, $scss_tags );
+            $scss_tags = $this->filter_unique_flatten_array($scss_tags);
+
+
+            /* filter js match result */
+            preg_match_all( $pattern_get_id_js, $js, $js_get_ids );
+            $js_get_ids = $this->filter_unique_flatten_array($js_get_ids[1]);
+
+            preg_match_all( $pattern_get_class_js, $js, $js_get_classes );
+            $js_get_classes = $this->filter_unique_flatten_array($js_get_classes[1]);
+
+            preg_match_all( $pattern_add_rem_hasClass_jQuery, $js, $js_add_rem_hasClass_match_jQuery );
+            preg_match_all( '/[\w\-]+/', join(',', $js_add_rem_hasClass_match_jQuery[1]), $js_add_rem_hasClass_jQuery);
+            $js_add_rem_hasClass_jQuery = $this->filter_unique_flatten_array($js_add_rem_hasClass_jQuery[0]);
+
+            preg_match_all( $pattern_selectors_jQuery, $js, $js_selectors_jQuery );
+
+            preg_match_all( $pattern_id_selectors_jQuery, join(',', $js_selectors_jQuery[1]), $js_id_selectors_jQuery );
+            foreach( $js_id_selectors_jQuery as $key => $id )
+            {
+                $js_id_selectors_jQuery[$key] = str_replace( '#', '', $id );
+            }
+            $js_id_selectors_jQuery = $this->filter_unique_flatten_array($js_id_selectors_jQuery[0]);
+
+            preg_match_all( $pattern_class_selectors_jQuery, join(',', $js_selectors_jQuery[1]), $js_class_selectors_jQuery );
+            foreach( $js_class_selectors_jQuery as $key => $class )
+            {
+                $js_class_selectors_jQuery[$key] = str_replace( '#', '', $class );
+            }
+            $js_class_selectors_jQuery = $this->filter_unique_flatten_array($js_class_selectors_jQuery[0]);
+
+            return (object) [
+                'html' => (object) [
+                    'id' => $html_ids,
+                    'class' => $html_classes,
+                    'tag' => $html_tags
+                ],
+                'scss' => (object) [
+                    'id' => $scss_ids,
+                    'class' => $scss_classes,
+                    'tag' => $scss_tags
+                ],
+                'js' => (object) [
+                    'id' => (object) [
+                        'get_id' => $js_get_ids,
+                        'id_jQuery' => $js_id_selectors_jQuery
+                    ],
+                    'class' => (object) [
+                        'get_class' => $js_get_classes,
+                        'class_jQuery' => $js_class_selectors_jQuery,
+                        'arh_jQuery' => $js_add_rem_hasClass_jQuery
+                    ]
+                ]
+            ];
+
+        }
+
+        /*
+         * flatten array
+         */
+        private function flatten_array(array $array)
+        {
+            $return = [];
             array_walk_recursive($array, function($a) use (&$return) { $return[] = $a; });
             return $return;
         }
 
-        public static function find_all_IDs_CLASSes_TAGs($HTML_content = null , $SCSS_content = null, $JS_content = null)
+        /*
+         * filter, unique and flatten array
+         */
+        private function filter_unique_flatten_array(array $array)
         {
-            $pattern_all_ids_classes_tags_SCSS = '/(?|(?:\{(?(?=\s+)\s+)[^\{\$]*?(?=\}))|(?=\{)\{[^\{\}]*?(?=\{(?(?=\s+)\s+)\$)\{[^\{]*?(?=\})\}(?(?=[^\{]*?(?=\#\{)\#\{[^\{]*?(?=\})\})(?:[^\{]*?(?=\#\{)\#\{[^\{]*?(?=\})\})+)[^\{]*?(?=\})|(?(?=\s+)\s+)(?:\@(?:-webkit-keyframes)).*?(?=\}(?(?=\s+)\s+)\})|(?(?=\s+)\s+)(?:\@(?:keyframes)).*?(?=\}(?(?=\s+)\s+)\}))(*SKIP)(*FAIL)|(?|(?(?=(?:\{(?(?=\s+)\s+)\{)|(?:\{(?(?=\s+)\s+)\})|(?:\}(?(?=\s+)\s+)\})|(?:\}(?(?=\s+)\s+)\{))\0|(?:\{|\})(?(?=\s+)\s+)(?(?=\@)\0|([^\%\;\@]*?(?(?=\#\{\$)\#\{\$.*?(?=\})))(?(?=\s+)\s+))(?(?=\}|\{\$)\0)(?=\{))|(?=\;)\;(?(?=\s+)\s+)([^\%\;\@\{\}]*?(?(?=\#\{\$)\#\{\$.*?(?=\})\}))(?(?=\s+)\s+)(?=\{)|(^[^\%\;\@]*?(?(?=\#\{\$)\#\{\$.*?(?=\})))(?=\{))/';
-
-            $pattern_all_ids_SCSS = '/(?(?=\#\w+)\#([\w\-]+)(?:(?=\,)|(?=\:)|(?=\s+)|(?=\.)|(?=\+)|(?=\~)|(?=\>)|(?=\[)|\#[\w\-]+|)|\0)/';
-            $pattern_all_classes_SCSS = '/(?(?=\.\w+)\.([\w\-]+)(?:(?=\,)|(?=\:)|(?=\s+)|(?=\#)|(?=\+)|(?=\~)|(?=\>)|(?=\[)|\.[\w\-]+|)|\0)/';
-            $pattern_all_tags_SCSS = '/(?(?=\#\w+)\#\w+|\0)(*SKIP)(*FAIL)|(?(?=\.\w+)\.\w+|\0)(*SKIP)(*FAIL)|(?(?=\-\w+)\-\w+|\0)(*SKIP)(*FAIL)|(?(?=\_\w+)\_\w+|\0)(*SKIP)(*FAIL)|(?(?=(?:\:lang\b|\:nth-child\b|\:nth-last-child\b|\:nth-last-of-type\b|\:nth-of-type\b)\((?(?=\s+)\s+).+?(?=\))\))(?:\:lang\b|\:nth-child\b|\:nth-last-child\b|\:nth-last-of-type\b|\:nth-of-type\b)\((?(?=\s+)\s+).+?(?=\))\)|\0)(*SKIP)(*FAIL)|(?(?=\:\w+)\:\w+|\0)(*SKIP)(*FAIL)|(?(?=\[(?(?=\s+)\s+)\w+)\[(?(?=\s+)\s+)\w+|\0)(*SKIP)(*FAIL)|(?(?=\=(?(?=\s+)\s+)\w+)\=(?(?=\s+)\s+)\w+|\0)(*SKIP)(*FAIL)|(?(?=\"(?(?=\s+)\s+)\w+)\"(?(?=\s+)\s+)\w+|\0)(*SKIP)(*FAIL)|(?(?=\'(?(?=\s+)\s+)\w+)\'(?(?=\s+)\s+)\w+|\0)(*SKIP)(*FAIL)|(\w+)/';
-
-            $pattern_all_ids_HTML = '/id\b(?(?=\s+)\s+)\=(?(?=\s+)\s+)\"(?(?=\s+)\s+)([\w+\-]+)(?(?=\s+)\s+)(?=\")/';
-            $pattern_all_classes_HTML = '/class\b(?(?=\s+)\s+)\=(?(?=\s+)\s+)\"(?(?=\s+)\s+)(.*?)(?(?=\s+)\s+)(?=\")/';
-            $pattern_all_tags_HTML = '/<(?(?=\s+)\s+)(\w+)/';
-
-            $pattern_get_id_JS = '/(?:getElementById\b)\(.*?[\"\'](?(?=\s+)\s+)([\w+\-]+)(?(?=\s+)\s+)[\"\']/';
-            $pattern_get_class_JS = '/(?:getElementsByClassName\b)\(.*?[\"\'](?(?=\s+)\s+)([\w+\-]+)(?(?=\s+)\s+)[\"\']/';
-
-            $pattern_add_rem_hasClass_JQuery = '/(?:\.addClass\b|\.hasClass\b|\.removeClass\b)\((?(?=\s+)\s+)[\"\'](?(?=\s+)\s+)(.+?)(?=\"|\')[\"\']\)/';
-            $pattern_selector_all_JQuery = '/(?:\$)\((?(?=\s+)\s+)[\"\'](?(?=\s+)\s+)(?(?=[a-zA-Z0-9\*\s\-\:\>\[\]\~\+\*\,\|\=\$\^\'\"\_\d]+?)[a-zA-Z0-9\*\s\-\:\>\[\]\~\+\*\,\|\=\$\^\'\"\_\d]+?)(?=\#|\.)(?|([\#\.a-zA-Z0-9\*\s\-\:\>\[\]\~\+\*\,\|\=\$\^\"\'\_\d\(\)]+?))(?(?=\s+)\s+)[\"\'](?(?=\s+)\s+)\)/';
-
-            $pattern_filter_id_JQuery = '/\#[\w\-]+/';
-            $pattern_filter_class_JQuery = '/\.[\w\-]+/';
-
-            if ($SCSS_content !== null)
-            {
-                preg_match_all( $pattern_all_ids_classes_tags_SCSS, $SCSS_content, $SCSS_matches );
-                $SCSS_match_result = str_replace(',,', ',', preg_replace( '/\s+/', ',', join( ',', $SCSS_matches[1] )));
-
-                preg_match_all( $pattern_all_ids_SCSS, $SCSS_match_result, $SCSS_ids );
-                preg_match_all( $pattern_all_classes_SCSS, $SCSS_match_result, $SCSS_classes );
-                preg_match_all( $pattern_all_tags_SCSS, $SCSS_match_result, $SCSS_tags );
-
-                foreach( $SCSS_ids as $id_key => $id_value )
-                {
-                    $SCSS_ids[$id_key] = str_replace( '#', '', $id_value );
-                }
-                $SCSS_ids = array_filter( array_unique( namespaceCSS::flatten_array( $SCSS_ids ) ), function($value) { return $value !== ''; } );
-
-                foreach( $SCSS_classes as $class_key => $class_value )
-                {
-                    $SCSS_classes[$class_key] = str_replace( '.', '', $class_value );
-                }
-                $SCSS_classes = array_filter( array_unique( namespaceCSS::flatten_array( $SCSS_classes ) ), function($value) { return $value !== ''; } );
-
-                $SCSS_tags = array_filter( array_unique( namespaceCSS::flatten_array( $SCSS_tags ) ), function($value) { return $value !== ''; } );
-            }
-
-            if ($HTML_content !== null)
-            {
-                preg_match_all( $pattern_all_ids_HTML, $HTML_content, $HTML_ids );
-                preg_match_all( $pattern_all_classes_HTML, $HTML_content, $HTML_class_match );
-                /*workaround for whitespaces in HTML e.g. class="class    class class"*/
-                preg_match_all('/(?|(.+?)(?:\,)|(.+))/', preg_replace( '/\s+/', ',', join(',',array_filter($HTML_class_match[1], function($value) { return $value !== ''; } ))), $HTML_classes);
-                preg_match_all( $pattern_all_tags_HTML, $HTML_content, $HTML_tags );
-
-                $HTML_ids = array_filter( array_unique( namespaceCSS::flatten_array( $HTML_ids[1] ) ), function($value) { return $value !== ''; } );
-
-                $HTML_classes = array_unique( $HTML_classes[1] );
-
-                $HTML_tags = array_filter( array_unique( namespaceCSS::flatten_array( $HTML_tags[1] ) ), function($value) { return $value !== ''; } );
-            }
-
-            if ($JS_content !== null)
-            {
-                preg_match_all( $pattern_get_id_JS, $JS_content, $JS_get_ids );
-                $JS_get_ids = array_filter( array_unique( namespaceCSS::flatten_array( $JS_get_ids[1] ) ), function($value) { return $value !== ''; } );
-
-                preg_match_all( $pattern_get_class_JS, $JS_content, $JS_get_classes );
-                $JS_get_classes = array_filter( array_unique( namespaceCSS::flatten_array( $JS_get_classes[1] ) ), function($value) { return $value !== ''; } );
-
-                preg_match_all( $pattern_add_rem_hasClass_JQuery, $JS_content, $JS_add_rem_hasClass_match_JQuery );
-                preg_match_all( '/[\w\-]+/', join(',', $JS_add_rem_hasClass_match_JQuery[1]), $JS_add_rem_hasClass_JQuery);
-
-                $JS_add_rem_hasClass_JQuery = array_filter( array_unique( namespaceCSS::flatten_array( $JS_add_rem_hasClass_JQuery[0] ) ), function($value) { return $value !== ''; } );
-
-                preg_match_all( $pattern_selector_all_JQuery, $JS_content, $JS_selector_all_JQuery );
-
-                preg_match_all( $pattern_filter_id_JQuery, join(',', $JS_selector_all_JQuery[1]), $JS_selector_id_jQuery );
-                foreach( $JS_selector_id_jQuery as $id_key => $id_value )
-                {
-                    $JS_selector_id_jQuery[$id_key] = str_replace( '#', '', $id_value );
-                }
-                $JS_selector_id_jQuery = array_filter( array_unique( namespaceCSS::flatten_array( $JS_selector_id_jQuery[0] ) ), function($value) { return $value !== ''; } );
-
-                preg_match_all( $pattern_filter_class_JQuery, join(',', $JS_selector_all_JQuery[1]), $JS_selector_class_jQuery );
-                foreach( $JS_selector_class_jQuery as $class_key => $class_value )
-                {
-                    $JS_selector_class_jQuery[$class_key] = str_replace( '.', '', $class_value );
-                }
-                $JS_selector_class_jQuery = array_filter( array_unique( namespaceCSS::flatten_array( $JS_selector_class_jQuery[0] ) ), function($value) { return $value !== ''; } );
-            }
-
-            if ($HTML_content !== null && $SCSS_content !== null && $JS_content !== null)
-            {
-                return [
-                    [
-                        $SCSS_ids,
-                        $SCSS_classes,
-                        $SCSS_tags
-                    ],
-                    [
-                        $HTML_ids,
-                        $HTML_classes,
-                        $HTML_tags
-                    ],
-                    [
-                        $JS_ids = [
-                            $JS_get_ids,
-                            $JS_selector_id_jQuery
-                        ],
-                        $JS_classes = [
-                            $JS_get_classes,
-                            $JS_add_rem_hasClass_JQuery,
-                            $JS_selector_class_jQuery
-                        ]
-                    ]
-                ];
-            }
+            return array_filter( array_unique( $this->flatten_array( $array ) ), function($value) { return $value !== ''; } );
         }
-
-        public static function set_namespace($all_IDs_CLASSes_TAGs, $HTML_content = null , $SCSS_content = null, $JS_content = null, $namespace = null)
-		{
-
-			$SCSS_ids = $all_IDs_CLASSes_TAGs[0][0];
-			$SCSS_classes = $all_IDs_CLASSes_TAGs[0][1];
-
-			$HTML_ids = $all_IDs_CLASSes_TAGs[1][0];
-			$HTML_classes = $all_IDs_CLASSes_TAGs[1][1];
-
-			$JS_get_ids = $all_IDs_CLASSes_TAGs[2][0][0];
-			$JS_selector_id_jQuery = $all_IDs_CLASSes_TAGs[2][0][1];
-
-			$JS_get_classes = $all_IDs_CLASSes_TAGs[2][1][0];
-			$JS_add_rem_hasClass_JQuery = $all_IDs_CLASSes_TAGs[2][1][1];
-			$JS_selector_class_jQuery = $all_IDs_CLASSes_TAGs[2][1][2];
-
-            if ( $HTML_content !== null && $namespace !== null )
-            {
-                if ( count($HTML_ids) > 0 )
-    			{
-    				foreach ($HTML_ids as $HTML_id_search_value)
-    				{
-    					$HTML_content = preg_replace_callback(
-    									'/(id(?(?=\s+)\s+)\=(?(?=\s+)\s+)\".*?)(' . $HTML_id_search_value . '\b.*?(?=\"))/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$HTML_content
-    								);
-    					$HTML_content = preg_replace_callback(
-    									'/<svg[^>]*?[^>]*?>([^<]*(?(?!<\/svg>)<))*<\/svg>/',
-    									function ($match) use($HTML_id_search_value, $namespace) {
-    										if (preg_match('/(?:xlink:href|href).*?\#' . $HTML_id_search_value . '\b/', $match[0]))
-    										{
-    											return $match[0] = preg_replace_callback(
-    															'/((?:xlink:href|href).*?\#)(' . $HTML_id_search_value . '\b)/',
-    															function ($matches) use ($namespace) {
-    																if ( preg_match('/' . $namespace . '\b/', $matches[0]) )
-    																{
-    																	return $matches[1] . $matches[2];
-    																}
-    																else
-    																{
-    																	return $matches[1] . $namespace . $matches[2];
-    																}
-    															},
-    															$match[0]
-    														);
-    										}
-    										else
-    										{
-    											return $match[0];
-    										}
-    									},
-    									$HTML_content
-    								);
-    				}
-    			}
-    			if ( count($HTML_classes) > 0 )
-    			{
-    				foreach ($HTML_classes as $HTML_class_search_value)
-    				{
-    					$HTML_content = preg_replace_callback(
-    									'/(class\b(?(?=\s+)\s+)\=(?(?=\s+)\s+).*?(?|(?:(?=\s+)\s+)|(?:(?=\")\")|(?:(?=\')\')))(' . $HTML_class_search_value . '\b.*?(?=\"))/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$HTML_content
-    								);
-    				}
-    			}
-            }
-            if ( $SCSS_content !== null && $namespace !== null )
-            {
-                if ( count($SCSS_ids) > 0 )
-    			{
-    				foreach ($SCSS_ids as $SCSS_id_search_value)
-    				{
-    					$SCSS_content = preg_replace_callback(
-    									'/(\#)(' . $SCSS_id_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$SCSS_content
-    								);
-    				}
-    			}
-    			if ( count($SCSS_classes) > 0 )
-    			{
-    				foreach ($SCSS_classes as $SCSS_class_search_value)
-    				{
-    					$SCSS_content = preg_replace_callback(
-    									'/(\.)(' . $SCSS_class_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$SCSS_content
-    								);
-    				}
-    			}
-            }
-            if ( $JS_content !== null && $namespace !== null )
-            {
-                if ( count($JS_get_ids) > 0 )
-    			{
-    				foreach ($JS_get_ids as $JS_get_id_search_value)
-    				{
-    					$JS_content = preg_replace_callback(
-    									'/((?:getElementById\b)\(.*?)(' . $JS_get_id_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$JS_content
-    								);
-    				}
-    			}
-    			if ( count($JS_selector_id_jQuery) > 0 )
-    			{
-    				foreach ($JS_selector_id_jQuery as $JS_selector_id_jQuery_search_value)
-    				{
-    					$JS_content = preg_replace_callback(
-    									'/((?:\$)\(.*?(?=\#)\#)(' . $JS_selector_id_jQuery_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$JS_content
-    								);
-    				}
-    			}
-    			if ( count($JS_get_classes) > 0 )
-    			{
-    				foreach ($JS_get_classes as $JS_get_class_search_value)
-    				{
-    					$JS_content = preg_replace_callback(
-    									'/((?:getElementsByClassName\b)\(.*?)(' . $JS_get_class_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$JS_content
-    								);
-    				}
-    			}
-    			if ( count($JS_add_rem_hasClass_JQuery) > 0 )
-    			{
-    				foreach ($JS_add_rem_hasClass_JQuery as $JS_add_rem_hasClass_JQuery_search_value)
-    				{
-    					$JS_content = preg_replace_callback(
-    									'/((?:\.addClass\b|\.hasClass\b|\.removeClass\b)\(.*?)(' . $JS_add_rem_hasClass_JQuery_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$JS_content
-    								);
-    				}
-    			}
-    			if ( count($JS_selector_class_jQuery) > 0 )
-    			{
-    				foreach ($JS_selector_class_jQuery as $JS_selector_class_jQuery_search_value)
-    				{
-    					$JS_content = preg_replace_callback(
-    									'/((?:\$)\(.*?(?=\.)\.)(' . $JS_selector_class_jQuery_search_value . '\b)/',
-    									function ($match) use ($namespace) {
-    										if ( preg_match('/' . $namespace . '\b/', $match[0]) )
-    										{
-    											return $match[1] . $match[2];
-    										}
-    										else
-    										{
-    											return $match[1] . $namespace . $match[2];
-    										}
-    									},
-    									$JS_content
-    								);
-    				}
-    			}
-            }
-
-			return [
-				$HTML_content,
-				$SCSS_content,
-				$JS_content
-			];
-		}
 
     }
 
