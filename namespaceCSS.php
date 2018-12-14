@@ -12,26 +12,27 @@
 
         function __construct(stdClass $selectors = null, array $html = [], array $scss = [], array $js = [], string $directory = '')
         {
+            $html_length = count($html);
+            $html_content = '';
+            while ($html_length--)
+            {
+                $html_content .= file_get_contents( $directory . $html[$html_length] );
+            }
+            $scss_length = count($scss);
+            $scss_content = '';
+            while ($scss_length--)
+            {
+                $scss_content .= file_get_contents( $directory . '/scss' . $scss[$scss_length] );
+            }
+            $js_length = count($js);
+            $js_content = '';
+            while ($js_length--)
+            {
+                $js_content .= file_get_contents( $directory . '/js' . $js[$js_length] );
+            }
+
             if ($selectors === null)
             {
-                $html_length = count($html);
-                $html_content = '';
-                while ($html_length--)
-                {
-                    $html_content .= file_get_contents( $directory . $html[$html_length] );
-                }
-                $scss_length = count($scss);
-                $scss_content = '';
-                while ($scss_length--)
-                {
-                    $scss_content .= file_get_contents( $directory . '/scss' . $scss[$scss_length] );
-                }
-                $js_length = count($js);
-                $js_content = '';
-                while ($js_length--)
-                {
-                    $js_content .= file_get_contents( $directory . '/js' . $js[$js_length] );
-                }
                 $selectors = $this->find_selectors($html_content, $scss_content, $js_content);
             }
 
