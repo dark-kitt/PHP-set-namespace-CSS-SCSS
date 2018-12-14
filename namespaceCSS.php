@@ -36,7 +36,10 @@
                 $selectors = $this->find_selectors($html_content, $scss_content, $js_content);
             }
 
-            $return = $this->set_namespace($selectors, $html_content,  $scss_content,  $js_content);
+            if ($selectors !== null)
+            {
+                $return = $this->set_namespace($selectors, $html_content,  $scss_content,  $js_content);
+            }
 
             $this->html = $return->html;
             $this->scss = $return->scss;
