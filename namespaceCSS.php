@@ -16,19 +16,40 @@
             $html_content = '';
             while ($html_length--)
             {
-                $html_content .= file_get_contents( $directory . $html[$html_length] );
+                if ( is_file( $directory . $html[$html_length] ) )
+                {
+                    $html_content .= file_get_contents( $directory . $html[$html_length] );
+                }
+                else
+                {
+                    $html_content .= $html[$html_length];
+                }
             }
             $scss_length = count($scss);
             $scss_content = '';
             while ($scss_length--)
             {
-                $scss_content .= file_get_contents( $directory . '/scss' . $scss[$scss_length] );
+                if ( is_file( $directory . '/scss' . $scss[$scss_length] ) )
+                {
+                    $scss_content .= file_get_contents( $directory . '/scss' . $scss[$scss_length] );
+                }
+                else
+                {
+                    $scss_content .= $scss[$scss_length];
+                }
             }
             $js_length = count($js);
             $js_content = '';
             while ($js_length--)
             {
-                $js_content .= file_get_contents( $directory . '/js' . $js[$js_length] );
+                if ( is_file( $directory . '/js' . $js[$js_length] ) )
+                {
+                    $js_content .= file_get_contents( $directory . '/js' . $js[$js_length] );
+                }
+                else
+                {
+                    $js_content .= $js[$js_length];
+                }
             }
 
             if ($selectors === null)
